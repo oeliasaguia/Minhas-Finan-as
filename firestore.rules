@@ -1,0 +1,172 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: /users/{userId}
+    // Document ID: userId (Firebase Auth UID)
+    // Fields:
+    //   - uid: string (required)
+    //   - email: string (required)
+    //   - displayName: string (required)
+    //   - photoURL: string (optional)
+    //   - currency: string (optional)
+    //   - theme: string (optional, enum: ['light', 'dark'])
+    //
+    // Collection: /users/{userId}/categories/{categoryId}
+    // Document ID: auto-generated
+    // Fields:
+    //   - id: string (required)
+    //   - name: string (required)
+    //   - icon: string (required)
+    //   - color: string (required)
+    //   - type: string (required, enum: ['revenue', 'expense_fixed', 'expense_variable', 'credit_card'])
+    //   - budget: number (optional)
+    //
+    // Collection: /users/{userId}/transactions/{transactionId}
+    // Document ID: auto-generated
+    // Fields:
+    //   - id: string (required)
+    //   - userId: string (required)
+    //   - description: string (required)
+    //   - amount: number (required)
+    //   - date: string (required, ISO 8601)
+    //   - type: string (required, enum: ['revenue', 'expense_fixed', 'expense_variable', 'credit_card'])
+    //   - categoryId: string (required)
+    //   - status: string (required, enum: ['paid', 'pending'])
+    //   - installments: map (optional)
+    //   - notes: string (optional)
+    //   - createdAt: string (required, ISO 8601)
+    //
+    // Collection: /users/{userId}/goals/{goalId}
+    // Document ID: auto-generated
+    // Fields:
+    //   - id: string (required)
+    //   - userId: string (required)
+    //   - name: string (required)
+    //   - targetAmount: number (required)
+    //   - currentAmount: number (required)
+    //   - deadline: string (optional, ISO 8601)
+    //   - color: string (required)
+    //   - icon: string (required)
+    //   - status: string (required, enum: ['active', 'completed', 'archived'])
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+          (request.auth.token.email == "elias.aguia@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function isValidDateString(dateStr) {
+      return dateStr is string && dateStr.matches("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}.*Z?$");
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidUser(data) {
+      return hasOnlyAllowedFields(['uid', 'email', 'displayName', 'photoURL', 'currency', 'theme', 'role']) &&
+             data.uid is string && data.uid.size() > 0 &&
+             data.email is string && isValidEmail(data.email) &&
+             data.displayName is string && data.displayName.size() > 0 &&
+             (!('photoURL' in data) || data.photoURL is string) &&
+             (!('currency' in data) || data.currency is string) &&
+             (!('theme' in data) || data.theme in ['light', 'dark']);
+    }
+
+    function isValidCategory(data) {
+      return hasOnlyAllowedFields(['id', 'name', 'icon', 'color', 'type', 'budget']) &&
+             data.id is string &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+             data.icon is string &&
+             data.color is string &&
+             data.type in ['revenue', 'expense_fixed', 'expense_variable', 'credit_card'] &&
+             (!('budget' in data) || data.budget is number);
+    }
+
+    function isValidTransaction(data) {
+      return hasOnlyAllowedFields(['id', 'userId', 'description', 'amount', 'date', 'type', 'categoryId', 'status', 'installments', 'notes', 'createdAt']) &&
+             data.id is string &&
+             data.userId is string &&
+             data.description is string && data.description.size() > 0 && data.description.size() < 200 &&
+             data.amount is number &&
+             data.date is string && isValidDateString(data.date) &&
+             data.type in ['revenue', 'expense_fixed', 'expense_variable', 'credit_card'] &&
+             data.categoryId is string &&
+             data.status in ['paid', 'pending'] &&
+             (!('installments' in data) || data.installments is map) &&
+             (!('notes' in data) || data.notes is string && data.notes.size() < 1000) &&
+             data.createdAt is string && isValidDateString(data.createdAt);
+    }
+
+    function isValidGoal(data) {
+      return hasOnlyAllowedFields(['id', 'userId', 'name', 'targetAmount', 'currentAmount', 'deadline', 'color', 'icon', 'status']) &&
+             data.id is string &&
+             data.userId is string &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+             data.targetAmount is number && data.targetAmount >= 0 &&
+             data.currentAmount is number && data.currentAmount >= 0 &&
+             (!('deadline' in data) || (data.deadline is string && isValidDateString(data.deadline))) &&
+             data.color is string &&
+             data.icon is string &&
+             data.status in ['active', 'completed', 'archived'];
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isOwner(userId) && isValidUser(request.resource.data) && (!('role' in request.resource.data) || request.resource.data.role == 'user');
+      allow update: if isOwner(userId) && isValidUser(request.resource.data) && (request.resource.data.role == resource.data.role || isAdmin());
+
+      match /categories/{categoryId} {
+        allow read: if isOwner(userId) || isAdmin();
+        allow create: if isOwner(userId) && isValidCategory(request.resource.data);
+        allow update: if isOwner(userId) && isValidCategory(request.resource.data);
+        allow delete: if isOwner(userId) || isAdmin();
+      }
+
+      match /transactions/{transactionId} {
+        allow read: if isOwner(userId) || isAdmin();
+        allow create: if isOwner(userId) && isValidTransaction(request.resource.data) && request.resource.data.userId == userId;
+        allow update: if isOwner(userId) && isValidTransaction(request.resource.data) && request.resource.data.userId == userId;
+        allow delete: if isOwner(userId) || isAdmin();
+      }
+
+      match /goals/{goalId} {
+        allow read: if isOwner(userId) || isAdmin();
+        allow create: if isOwner(userId) && isValidGoal(request.resource.data) && request.resource.data.userId == userId;
+        allow update: if isOwner(userId) && isValidGoal(request.resource.data) && request.resource.data.userId == userId;
+        allow delete: if isOwner(userId) || isAdmin();
+      }
+    }
+  }
+}

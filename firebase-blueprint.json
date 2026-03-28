@@ -1,0 +1,92 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User profile information and settings",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string", "format": "uri" },
+        "currency": { "type": "string" },
+        "theme": { "type": "string", "enum": ["light", "dark"] }
+      },
+      "required": ["uid", "email", "displayName"]
+    },
+    "Category": {
+      "title": "Category",
+      "description": "Financial category for transactions",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "icon": { "type": "string" },
+        "color": { "type": "string" },
+        "type": { "type": "string", "enum": ["revenue", "expense_fixed", "expense_variable", "credit_card"] },
+        "budget": { "type": "number" }
+      },
+      "required": ["id", "name", "icon", "color", "type"]
+    },
+    "Transaction": {
+      "title": "Transaction",
+      "description": "A single financial transaction",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "description": { "type": "string" },
+        "amount": { "type": "number" },
+        "date": { "type": "string", "format": "date-time" },
+        "type": { "type": "string", "enum": ["revenue", "expense_fixed", "expense_variable", "credit_card"] },
+        "categoryId": { "type": "string" },
+        "status": { "type": "string", "enum": ["paid", "pending"] },
+        "installments": {
+          "type": "object",
+          "properties": {
+            "current": { "type": "integer" },
+            "total": { "type": "integer" }
+          }
+        },
+        "notes": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "userId", "description", "amount", "date", "type", "categoryId", "status", "createdAt"]
+    },
+    "Goal": {
+      "title": "Goal",
+      "description": "A financial goal",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "targetAmount": { "type": "number" },
+        "currentAmount": { "type": "number" },
+        "deadline": { "type": "string", "format": "date-time" },
+        "color": { "type": "string" },
+        "icon": { "type": "string" },
+        "status": { "type": "string", "enum": ["active", "completed", "archived"] }
+      },
+      "required": ["id", "userId", "name", "targetAmount", "currentAmount", "color", "icon", "status"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "User profile document"
+    },
+    "/users/{userId}/categories/{categoryId}": {
+      "schema": "Category",
+      "description": "User-specific categories"
+    },
+    "/users/{userId}/transactions/{transactionId}": {
+      "schema": "Transaction",
+      "description": "User transactions"
+    },
+    "/users/{userId}/goals/{goalId}": {
+      "schema": "Goal",
+      "description": "User financial goals"
+    }
+  }
+}
