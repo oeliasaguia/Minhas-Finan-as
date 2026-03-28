@@ -67,6 +67,7 @@ export default function App() {
  setIsAuthReady(true);
  
  if (currentUser) {
+ try {
  // Check if user profile exists, if not create it and seed data
  let profile = await financeService.getUserProfile(currentUser.uid);
  if (!profile) {
@@ -95,6 +96,10 @@ export default function App() {
  unsubCategories();
  unsubGoals();
  };
+ } catch (error) {
+ console.error("Error initializing user data:", error);
+ setIsLoading(false);
+ }
  } else {
  setUserProfile(null);
  setIsLoading(false);
